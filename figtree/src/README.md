@@ -1,5 +1,3 @@
-# figtree/src
-
 This directory contains the complete runtime implementation of the figtree
 crate. Each file is a self-contained module with a single responsibility.
 Files are listed here in dependency order — each module only imports from
