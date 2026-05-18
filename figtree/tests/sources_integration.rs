@@ -1,10 +1,4 @@
-//! Integration tests for file sources through a real Tree.
-//!
-//! These tests write real temp files and load them through the Tree's
-//! file source pipeline, exercising the full path from file → source →
-//! resolution → getter.
-
-use figtree::{FigValue, Tree};
+use figtree::Tree;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -61,15 +55,15 @@ fn yaml_source_provides_values() {
     writeln!(f, "endpoint: https://api.example.com").unwrap();
 
     let mut tree = Tree::new();
-    tree.new_int("workers",    4,                         "")
-        .new_bool("debug",     false,                     "")
-        .new_string("endpoint","http://localhost",        "");
+    tree.new_int("workers",     4,                        "")
+        .new_bool("debug",      false,                    "")
+        .new_string("endpoint", "http://localhost",       "");
     tree.with_yaml_file(f.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    assert_eq!(tree.integer("workers").unwrap(),  16);
-    assert_eq!(tree.boolean("debug").unwrap(),    true);
-    assert_eq!(tree.string("endpoint").unwrap(),  "https://api.example.com");
+    assert_eq!(tree.integer("workers").unwrap(), 16);
+    assert_eq!(tree.boolean("debug").unwrap(),   true);
+    assert_eq!(tree.string("endpoint").unwrap(), "https://api.example.com");
 }
 
 #[cfg(feature = "yaml")]
@@ -77,7 +71,6 @@ fn yaml_source_provides_values() {
 fn yaml_source_falls_through_for_missing_keys() {
     let mut f = NamedTempFile::new().unwrap();
     writeln!(f, "workers: 16").unwrap();
-    // endpoint not in yaml — should fall through to default
 
     let mut tree = Tree::new();
     tree.new_int("workers",     4,                  "")
@@ -107,7 +100,6 @@ fn yaml_document_start_marker_handled() {
 #[cfg(feature = "yaml")]
 #[test]
 fn yaml_yml_extension_accepted() {
-    use std::io::Write;
     use tempfile::Builder;
 
     let mut f = Builder::new().suffix(".yml").tempfile().unwrap();
@@ -130,15 +122,15 @@ fn json_source_provides_values() {
     writeln!(f, r#"{{"workers": 8, "debug": true, "threshold": 0.9}}"#).unwrap();
 
     let mut tree = Tree::new();
-    tree.new_int("workers",      4,     "")
-        .new_bool("debug",       false, "")
-        .new_float64("threshold",0.5,   "");
+    tree.new_int("workers",       4,     "")
+        .new_bool("debug",        false, "")
+        .new_float64("threshold", 0.5,   "");
     tree.with_json_file(f.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    assert_eq!(tree.integer("workers").unwrap(),  8);
-    assert_eq!(tree.boolean("debug").unwrap(),    true);
-    assert_eq!(tree.float64("threshold").unwrap(),0.9);
+    assert_eq!(tree.integer("workers").unwrap(),   8);
+    assert_eq!(tree.boolean("debug").unwrap(),     true);
+    assert_eq!(tree.float64("threshold").unwrap(), 0.9);
 }
 
 // ── TOML source ───────────────────────────────────────────────────────────────
@@ -177,11 +169,11 @@ fn toml_nested_key_via_dotted_access() {
     tree.with_toml_file(f.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    assert_eq!(tree.string("database.host").unwrap(), "db.example.com");
+    assert_eq!(tree.string("database.host").unwrap(),  "db.example.com");
     assert_eq!(tree.integer("database.port").unwrap(), 5432);
 }
 
-// ── Multiple file sources — first registered wins ─────────────────────────────
+// ── Multiple file sources ─────────────────────────────────────────────────────
 
 #[cfg(feature = "yaml")]
 #[test]
@@ -198,7 +190,6 @@ fn first_file_source_wins_over_second() {
     tree.with_yaml_file(local.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    // base.yaml registered first — should win
     assert_eq!(tree.integer("workers").unwrap(), 10);
 }
 
@@ -207,7 +198,6 @@ fn first_file_source_wins_over_second() {
 fn second_file_used_when_first_lacks_key() {
     let mut base = NamedTempFile::new().unwrap();
     writeln!(base, "workers: 10").unwrap();
-    // base has no "endpoint"
 
     let mut local = NamedTempFile::new().unwrap();
     writeln!(local, "endpoint: https://local.example.com").unwrap();
@@ -219,8 +209,8 @@ fn second_file_used_when_first_lacks_key() {
     tree.with_yaml_file(local.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    assert_eq!(tree.integer("workers").unwrap(),  10);
-    assert_eq!(tree.string("endpoint").unwrap(),  "https://local.example.com");
+    assert_eq!(tree.integer("workers").unwrap(), 10);
+    assert_eq!(tree.string("endpoint").unwrap(), "https://local.example.com");
 }
 
 // ── PEMDAS: env beats file beats default ──────────────────────────────────────
@@ -240,7 +230,6 @@ fn env_beats_file_beats_default() {
     tree.with_yaml_file(f.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    // env (50) > file (30) > default (10)
     assert_eq!(tree.integer(env_key).unwrap(), 50);
 
     std::env::remove_var(env_key);
@@ -260,7 +249,6 @@ fn file_beats_default_when_no_env() {
     tree.with_yaml_file(f.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    // file (30) > default (10)
     assert_eq!(tree.integer(key).unwrap(), 30);
 }
 
@@ -295,8 +283,6 @@ fn dotenv_does_not_leak_into_process_environment() {
     tree.with_dotenv_file(f.path().to_str().unwrap()).unwrap();
     tree.parse().unwrap();
 
-    // value available through figtree
     assert_eq!(tree.string(isolation_key).unwrap(), "leaked_value");
-    // but NOT in the process environment
     assert!(std::env::var(isolation_key).is_err());
 }
