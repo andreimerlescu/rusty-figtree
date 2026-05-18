@@ -4,7 +4,7 @@ use std::fmt;
 ///
 /// Every fallible operation in the crate returns FigtreeError.
 /// Consumers match on variants to handle specific failure modes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FigtreeError {
 
     /// A required configuration key had no value from any source
