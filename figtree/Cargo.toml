@@ -1,22 +1,36 @@
 [package]
-name    = "figtree"
-version = "0.0.1"   # driven by VERSION file via build.rs
+name        = "figtree"
+description = "A layered runtime configuration system with priority resolution, validators, callbacks, and live mutation tracking."
+readme      = "README.md"
+keywords    = ["config", "configuration", "runtime", "figtree", "settings"]
+categories  = ["config", "data-structures"]
+
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+homepage.workspace    = true
+authors.workspace     = true
 
 [features]
-default  = ["std", "yaml", "json", "env"]
+default  = ["std", "env", "yaml", "json"]
 std      = []
 async    = ["tokio"]
 cli      = ["clap"]
 yaml     = ["serde", "serde_yaml"]
 json     = ["serde", "serde_json"]
 ini      = ["rust-ini"]
-embedded = []   # implies no_std, no file sources
+embedded = []
 
 [dependencies]
 figtree-derive = { path = "../figtree-derive", version = "0.0.1" }
-serde          = { version = "1",   optional = true, features = ["derive"] }
-serde_yaml     = { version = "0.9", optional = true }
-serde_json     = { version = "1",   optional = true }
-rust-ini       = { version = "0.21", optional = true }
-clap           = { version = "4",   optional = true, features = ["derive"] }
-tokio          = { version = "1",   optional = true, features = ["sync"] }
+thiserror      = { workspace = true }
+serde          = { workspace = true, optional = true }
+serde_yaml     = { workspace = true, optional = true }
+serde_json     = { workspace = true, optional = true }
+rust-ini       = { workspace = true, optional = true }
+clap           = { workspace = true, optional = true }
+tokio          = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
