@@ -1,4 +1,5 @@
 use proc_macro2::TokenStream;
+use quote::quote;
 use syn::{
     Attribute, DeriveInput, Expr, Field, Fields, Ident, Lit, Meta,
     Type, spanned::Spanned,
