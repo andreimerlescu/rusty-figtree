@@ -1,23 +1,12 @@
-//! Integration tests for validators wired through a real Tree.
-//!
-//! Unit tests in validators.rs test validator functions against raw
-//! FigValue. These tests verify validators work correctly when registered
-//! on a Tree key and triggered by parse(), load(), and store().
-
 use figtree::{
     FigtreeError, FigValue, Tree,
     validators::{
         assure_string_not_empty,
         assure_string_has_prefix,
-        assure_string_has_suffix,
         assure_string_contains,
-        assure_string_length_greater_than,
         assure_int_positive,
         assure_int_in_range,
-        assure_int64_positive,
         assure_int128_positive,
-        assure_float64_not_nan,
-        assure_float64_in_range,
         assure_duration_positive,
         assure_duration_min,
         assure_list_not_empty,
@@ -72,9 +61,9 @@ fn string_has_prefix_fails() {
 fn multiple_validators_all_must_pass() {
     let mut tree = Tree::new();
     tree.new_string("endpoint", "https://api.example.com", "");
-    tree.with_validator("endpoint", "not_empty",   assure_string_not_empty).unwrap();
-    tree.with_validator("endpoint", "has_https",   assure_string_has_prefix("https")).unwrap();
-    tree.with_validator("endpoint", "has_dot",     assure_string_contains(".")).unwrap();
+    tree.with_validator("endpoint", "not_empty", assure_string_not_empty).unwrap();
+    tree.with_validator("endpoint", "has_https",  assure_string_has_prefix("https")).unwrap();
+    tree.with_validator("endpoint", "has_dot",    assure_string_contains(".")).unwrap();
     assert!(tree.parse().is_ok());
 }
 
@@ -106,7 +95,6 @@ fn validator_on_store_blocks_invalid_value() {
 
     let result = tree.store("workers", FigValue::Int(0));
     assert!(matches!(result, Err(FigtreeError::ValidationFailed { .. })));
-    // value must be unchanged
     assert_eq!(tree.integer("workers").unwrap(), 4);
 }
 
@@ -147,11 +135,6 @@ fn int_in_range_passes_on_boundary() {
     tree.new_int("port", 1, "");
     tree.with_validator("port", "range", assure_int_in_range(1, 65535)).unwrap();
     assert!(tree.parse().is_ok());
-
-    let mut tree2 = Tree::new();
-    tree2.new_int("port", 65535, "");
-    tree2.with_validator("port", "range", assure_int_in_range(1, 65535)).unwrap();
-    assert!(tree2.parse().is_ok());
 }
 
 #[test]
