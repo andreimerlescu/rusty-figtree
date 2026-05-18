@@ -26,10 +26,11 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests (figtree)
-        run: cargo test --verbose --package figtree
+        run: cargo test --quiet --package figtree
 
       - name: Run tests (figtree-derive)
-        run: cargo test --verbose --package figtree-derive
+        run: cargo test --quiet --package figtree-deriv
+
 
   build:
     name: Build
