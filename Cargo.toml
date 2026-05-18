@@ -1,22 +1,6 @@
-[package]
-name    = "figtree"
-version = "0.0.1"   # driven by VERSION file via build.rs
-
-[features]
-default  = ["std", "yaml", "json", "env"]
-std      = []
-async    = ["tokio"]
-cli      = ["clap"]
-yaml     = ["serde", "serde_yaml"]
-json     = ["serde", "serde_json"]
-ini      = ["rust-ini"]
-embedded = []   # implies no_std, no file sources
-
-[dependencies]
-figtree-derive = { path = "../figtree-derive", version = "0.0.1" }
-serde          = { version = "1",   optional = true, features = ["derive"] }
-serde_yaml     = { version = "0.9", optional = true }
-serde_json     = { version = "1",   optional = true }
-rust-ini       = { version = "0.21", optional = true }
-clap           = { version = "4",   optional = true, features = ["derive"] }
-tokio          = { version = "1",   optional = true, features = ["sync"] }
+[workspace]
+members = [
+    "figtree",
+    "figtree-derive",
+]
+resolver = "2"
