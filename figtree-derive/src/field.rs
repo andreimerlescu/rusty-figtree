@@ -94,7 +94,7 @@ pub enum FieldMutagenesis {
     Int64,
     Int128,
     Float64,
-    Float128,
+    // Float128, // disabled until f128 is stable
     Bool,
     Duration,
     ListString,
@@ -188,6 +188,8 @@ impl FieldMutagenesis {
         ))
     }
 
+    /*
+    // disabled until rust f128 is stable
     pub fn tree_registration_method(&self) -> &'static str {
         match self {
             FieldMutagenesis::String      => "new_string",
@@ -195,7 +197,7 @@ impl FieldMutagenesis {
             FieldMutagenesis::Int64       => "new_int64",
             FieldMutagenesis::Int128      => "new_int128",
             FieldMutagenesis::Float64     => "new_float64",
-            FieldMutagenesis::Float128    => "new_float128",
+            // FieldMutagenesis::Float128    => "new_float128", // disabled until rust f128 is stable
             FieldMutagenesis::Bool        => "new_bool",
             FieldMutagenesis::Duration    => "new_duration",
             FieldMutagenesis::ListString  => "new_list_string",
@@ -216,7 +218,7 @@ impl FieldMutagenesis {
             FieldMutagenesis::Int64       => "int64",
             FieldMutagenesis::Int128      => "int128",
             FieldMutagenesis::Float64     => "float64",
-            FieldMutagenesis::Float128    => "float128",
+            // FieldMutagenesis::Float128    => "float128", // disabed until rust f128 is stable
             FieldMutagenesis::Bool        => "boolean",
             FieldMutagenesis::Duration    => "duration",
             FieldMutagenesis::ListString  => "list_string",
@@ -237,7 +239,7 @@ impl FieldMutagenesis {
             FieldMutagenesis::Int64       => "Int64",
             FieldMutagenesis::Int128      => "Int128",
             FieldMutagenesis::Float64     => "Float64",
-            FieldMutagenesis::Float128    => "Float128",
+            // FieldMutagenesis::Float128    => "Float128", // disabled until rust f128 stable
             FieldMutagenesis::Bool        => "Bool",
             FieldMutagenesis::Duration    => "Duration",
             FieldMutagenesis::ListString  => "ListString",
@@ -265,6 +267,7 @@ impl FieldMutagenesis {
                 | FieldMutagenesis::MapBool
         )
     }
+    // disabled until rust f128 is stable */
 }
 
 // ── FieldRule ─────────────────────────────────────────────────────────────────
@@ -332,6 +335,7 @@ impl FieldRule {
 /// used only during macro expansion and never needs to be printed.
 pub struct FieldConfig {
     pub ident:       Ident,
+    #[allow(unused)]
     pub ty:          Type,
     pub mutagenesis: FieldMutagenesis,
     pub key:         String,
