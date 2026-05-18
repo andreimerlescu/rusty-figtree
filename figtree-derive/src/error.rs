@@ -1,5 +1,4 @@
 use proc_macro2::TokenStream;
-use quote::quote;
 use syn::spanned::Spanned;
 
 /// Converts a syn::Error into a TokenStream that emits a compile_error!
