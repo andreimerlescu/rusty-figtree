@@ -79,8 +79,20 @@ pub use sources::YamlSource;
 #[cfg(feature = "json")]
 pub use sources::JsonSource;
 
+#[cfg(feature = "toml-fmt")]
+pub use sources::TomlSource;
+
 #[cfg(feature = "ini")]
 pub use sources::IniSource;
+
+#[cfg(feature = "plist")]
+pub use sources::PlistSource;
+
+#[cfg(feature = "dotenv")]
+pub use sources::DotenvSource;
+
+#[cfg(feature = "ron")]
+pub use sources::RonSource;
 
 #[cfg(feature = "embedded")]
 pub use sources::EmbeddedSource;
