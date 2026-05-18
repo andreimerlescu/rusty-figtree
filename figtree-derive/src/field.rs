@@ -1,0 +1,644 @@
+use proc_macro2::TokenStream;
+use syn::{
+    Attribute, DeriveInput, Expr, Field, Fields, Ident, Lit, Meta,
+    Type, spanned::Spanned,
+};
+
+use crate::error::syn_error;
+
+// ── StructConfig ──────────────────────────────────────────────────────────────
+
+/// Parsed attributes from the #[figtree()] annotation on the struct itself.
+///
+/// These control Tree-level behavior — which files to load, whether to
+/// enable tracking and pollination.
+#[derive(Debug, Default)]
+pub struct StructConfig {
+    /// Config files to load in registration order.
+    /// Each entry is a file path string literal.
+    pub files: Vec<String>,
+
+    /// Whether to enable mutation tracking on the generated Tree.
+    pub tracking: bool,
+
+    /// Whether to enable pollination on the generated Tree.
+    pub pollinate: bool,
+
+    /// Whether to enable germination (ignore -test. flags).
+    pub germinate: bool,
+}
+
+impl StructConfig {
+    /// Parses the #[figtree()] attributes from the struct-level annotations.
+    pub fn from_attrs(attrs: &[Attribute]) -> syn::Result<Self> {
+        let mut config = StructConfig::default();
+
+        for attr in attrs {
+            if !attr.path().is_ident("figtree") {
+                continue;
+            }
+            attr.parse_nested_meta(|meta| {
+                // file = "path/to/file"
+                if meta.path.is_ident("file") {
+                    let value = meta.value()?;
+                    let lit: Lit = value.parse()?;
+                    if let Lit::Str(s) = lit {
+                        config.files.push(s.value());
+                    } else {
+                        return Err(syn_error(&meta.path, "file must be a string literal"));
+                    }
+                    return Ok(());
+                }
+
+                // tracking = true|false
+                if meta.path.is_ident("tracking") {
+                    let value = meta.value()?;
+                    let lit: Lit = value.parse()?;
+                    if let Lit::Bool(b) = lit {
+                        config.tracking = b.value();
+                    } else {
+                        return Err(syn_error(&meta.path, "tracking must be a bool literal"));
+                    }
+                    return Ok(());
+                }
+
+                // pollinate = true|false
+                if meta.path.is_ident("pollinate") {
+                    let value = meta.value()?;
+                    let lit: Lit = value.parse()?;
+                    if let Lit::Bool(b) = lit {
+                        config.pollinate = b.value();
+                    } else {
+                        return Err(syn_error(&meta.path, "pollinate must be a bool literal"));
+                    }
+                    return Ok(());
+                }
+
+                // germinate = true|false
+                if meta.path.is_ident("germinate") {
+                    let value = meta.value()?;
+                    let lit: Lit = value.parse()?;
+                    if let Lit::Bool(b) = lit {
+                        config.germinate = b.value();
+                    } else {
+                        return Err(syn_error(&meta.path, "germinate must be a bool literal"));
+                    }
+                    return Ok(());
+                }
+
+                Err(syn_error(
+                    &meta.path,
+                    &format!(
+                        "unknown struct-level figtree attribute '{}'. \
+                         Expected: file, tracking, pollinate, germinate",
+                        meta.path.get_ident().map(|i| i.to_string()).unwrap_or_default()
+                    ),
+                ))
+            })?;
+        }
+
+        Ok(config)
+    }
+}
+
+// ── FieldMutagenesis ──────────────────────────────────────────────────────────
+
+/// The mutagenesis type of a field — which FigValue variant it maps to
+/// and which Tree registration method to call.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldMutagenesis {
+    String,
+    Int,
+    Int64,
+    Int128,
+    Float64,
+    Float128,
+    Bool,
+    Duration,
+    ListString,
+    ListInt,
+    ListInt64,
+    ListInt128,
+    ListFloat64,
+    ListBool,
+    MapString,
+    MapBool,
+}
+
+impl FieldMutagenesis {
+    /// Infers the mutagenesis from a Rust type path.
+    /// Returns an error if the type is not recognized.
+    pub fn from_type(ty: &Type) -> syn::Result<Self> {
+        let path = match ty {
+            Type::Path(tp) => &tp.path,
+            _ => return Err(syn::Error::new(
+                ty.span(),
+                "figtree: field type must be a path type (e.g. i32, String, Vec<String>)",
+            )),
+        };
+
+        let segment = path.segments.last().ok_or_else(|| {
+            syn::Error::new(ty.span(), "figtree: empty type path")
+        })?;
+
+        let ident = segment.ident.to_string();
+
+        match ident.as_str() {
+            "String" => return Ok(FieldMutagenesis::String),
+            "i32"    => return Ok(FieldMutagenesis::Int),
+            "i64"    => return Ok(FieldMutagenesis::Int64),
+            "i128"   => return Ok(FieldMutagenesis::Int128),
+            "f64"    => return Ok(FieldMutagenesis::Float64),
+            "bool"   => return Ok(FieldMutagenesis::Bool),
+            "Duration" | "StdDuration" => return Ok(FieldMutagenesis::Duration),
+            _ => {}
+        }
+
+        // Vec<T> and HashMap<String, T>
+        if ident == "Vec" {
+            let inner = extract_first_generic_arg(segment)?;
+            return match inner.as_str() {
+                "String" => Ok(FieldMutagenesis::ListString),
+                "i32"    => Ok(FieldMutagenesis::ListInt),
+                "i64"    => Ok(FieldMutagenesis::ListInt64),
+                "i128"   => Ok(FieldMutagenesis::ListInt128),
+                "f64"    => Ok(FieldMutagenesis::ListFloat64),
+                "bool"   => Ok(FieldMutagenesis::ListBool),
+                other    => Err(syn::Error::new(
+                    ty.span(),
+                    &format!(
+                        "figtree: Vec<{}> is not a supported mutagenesis. \
+                         Supported element types: String, i32, i64, i128, f64, bool",
+                        other
+                    ),
+                )),
+            };
+        }
+
+        if ident == "HashMap" {
+            let (key, val) = extract_map_generic_args(segment)?;
+            if key != "String" {
+                return Err(syn::Error::new(
+                    ty.span(),
+                    "figtree: HashMap key must be String",
+                ));
+            }
+            return match val.as_str() {
+                "String" => Ok(FieldMutagenesis::MapString),
+                "bool"   => Ok(FieldMutagenesis::MapBool),
+                other    => Err(syn::Error::new(
+                    ty.span(),
+                    &format!(
+                        "figtree: HashMap<String, {}> is not a supported mutagenesis. \
+                         Supported value types: String, bool",
+                        other
+                    ),
+                )),
+            };
+        }
+
+        Err(syn::Error::new(
+            ty.span(),
+            &format!(
+                "figtree: '{}' is not a recognized mutagenesis type. \
+                 Supported: String, i32, i64, i128, f64, bool, Duration, \
+                 Vec<String|i32|i64|i128|f64|bool>, \
+                 HashMap<String, String|bool>",
+                ident
+            ),
+        ))
+    }
+
+    /// Returns the Tree registration method name for this mutagenesis.
+    pub fn tree_registration_method(&self) -> &'static str {
+        match self {
+            FieldMutagenesis::String     => "new_string",
+            FieldMutagenesis::Int        => "new_int",
+            FieldMutagenesis::Int64      => "new_int64",
+            FieldMutagenesis::Int128     => "new_int128",
+            FieldMutagenesis::Float64    => "new_float64",
+            FieldMutagenesis::Float128   => "new_float128",
+            FieldMutagenesis::Bool       => "new_bool",
+            FieldMutagenesis::Duration   => "new_duration",
+            FieldMutagenesis::ListString => "new_list_string",
+            FieldMutagenesis::ListInt    => "new_list_int",
+            FieldMutagenesis::ListInt64  => "new_list_int64",
+            FieldMutagenesis::ListInt128 => "new_list_int128",
+            FieldMutagenesis::ListFloat64=> "new_list_float64",
+            FieldMutagenesis::ListBool   => "new_list_bool",
+            FieldMutagenesis::MapString  => "new_map_string",
+            FieldMutagenesis::MapBool    => "new_map_bool",
+        }
+    }
+
+    /// Returns the Tree getter method name for this mutagenesis.
+    pub fn tree_getter_method(&self) -> &'static str {
+        match self {
+            FieldMutagenesis::String     => "string",
+            FieldMutagenesis::Int        => "integer",
+            FieldMutagenesis::Int64      => "int64",
+            FieldMutagenesis::Int128     => "int128",
+            FieldMutagenesis::Float64    => "float64",
+            FieldMutagenesis::Float128   => "float128",
+            FieldMutagenesis::Bool       => "boolean",
+            FieldMutagenesis::Duration   => "duration",
+            FieldMutagenesis::ListString => "list_string",
+            FieldMutagenesis::ListInt    => "list_int",
+            FieldMutagenesis::ListInt64  => "list_int",
+            FieldMutagenesis::ListInt128 => "list_int",
+            FieldMutagenesis::ListFloat64=> "list_int",
+            FieldMutagenesis::ListBool   => "list_int",
+            FieldMutagenesis::MapString  => "map_string",
+            FieldMutagenesis::MapBool    => "map_string",
+        }
+    }
+
+    /// Returns the FigValue variant name for this mutagenesis.
+    pub fn fig_value_variant(&self) -> &'static str {
+        match self {
+            FieldMutagenesis::String     => "String",
+            FieldMutagenesis::Int        => "Int",
+            FieldMutagenesis::Int64      => "Int64",
+            FieldMutagenesis::Int128     => "Int128",
+            FieldMutagenesis::Float64    => "Float64",
+            FieldMutagenesis::Float128   => "Float128",
+            FieldMutagenesis::Bool       => "Bool",
+            FieldMutagenesis::Duration   => "Duration",
+            FieldMutagenesis::ListString => "ListString",
+            FieldMutagenesis::ListInt    => "ListInt",
+            FieldMutagenesis::ListInt64  => "ListInt64",
+            FieldMutagenesis::ListInt128 => "ListInt128",
+            FieldMutagenesis::ListFloat64=> "ListFloat64",
+            FieldMutagenesis::ListBool   => "ListBool",
+            FieldMutagenesis::MapString  => "MapString",
+            FieldMutagenesis::MapBool    => "MapBool",
+        }
+    }
+
+    /// Returns true if the getter returns a value that needs .clone()
+    /// (non-Copy types).
+    pub fn needs_clone(&self) -> bool {
+        matches!(
+            self,
+            FieldMutagenesis::String
+                | FieldMutagenesis::ListString
+                | FieldMutagenesis::ListInt
+                | FieldMutagenesis::ListInt64
+                | FieldMutagenesis::ListInt128
+                | FieldMutagenesis::ListFloat64
+                | FieldMutagenesis::ListBool
+                | FieldMutagenesis::MapString
+                | FieldMutagenesis::MapBool
+        )
+    }
+}
+
+// ── FieldRule ─────────────────────────────────────────────────────────────────
+
+/// A rule parsed from #[figtree(rule = ...)]
+#[derive(Debug, Clone)]
+pub enum FieldRule {
+    PreventChange,
+    PanicOnChange,
+    NoValidations,
+    NoCallbacks,
+    NoFlags,
+    NoEnv,
+    NoMaps,
+    NoLists,
+    CondemnedFromResurrection,
+}
+
+impl FieldRule {
+    pub fn from_ident(ident: &Ident) -> syn::Result<Self> {
+        match ident.to_string().as_str() {
+            "RulePreventChange"             => Ok(FieldRule::PreventChange),
+            "RulePanicOnChange"             => Ok(FieldRule::PanicOnChange),
+            "RuleNoValidations"             => Ok(FieldRule::NoValidations),
+            "RuleNoCallbacks"               => Ok(FieldRule::NoCallbacks),
+            "RuleNoFlags"                   => Ok(FieldRule::NoFlags),
+            "RuleNoEnv"                     => Ok(FieldRule::NoEnv),
+            "RuleNoMaps"                    => Ok(FieldRule::NoMaps),
+            "RuleNoLists"                   => Ok(FieldRule::NoLists),
+            "RuleCondemnedFromResurrection" => Ok(FieldRule::CondemnedFromResurrection),
+            other => Err(syn_error(
+                ident,
+                &format!(
+                    "unknown rule '{}'. Expected one of: RulePreventChange, \
+                     RulePanicOnChange, RuleNoValidations, RuleNoCallbacks, \
+                     RuleNoFlags, RuleNoEnv, RuleNoMaps, RuleNoLists, \
+                     RuleCondemnedFromResurrection",
+                    other
+                ),
+            )),
+        }
+    }
+
+    /// Returns the figtree::Rule variant TokenStream for code generation.
+    pub fn to_token_stream(&self) -> TokenStream {
+        match self {
+            FieldRule::PreventChange             => quote! { figtree::Rule::PreventChange },
+            FieldRule::PanicOnChange             => quote! { figtree::Rule::PanicOnChange },
+            FieldRule::NoValidations             => quote! { figtree::Rule::NoValidations },
+            FieldRule::NoCallbacks               => quote! { figtree::Rule::NoCallbacks },
+            FieldRule::NoFlags                   => quote! { figtree::Rule::NoFlags },
+            FieldRule::NoEnv                     => quote! { figtree::Rule::NoEnv },
+            FieldRule::NoMaps                    => quote! { figtree::Rule::NoMaps },
+            FieldRule::NoLists                   => quote! { figtree::Rule::NoLists },
+            FieldRule::CondemnedFromResurrection => quote! { figtree::Rule::CondemnedFromResurrection },
+        }
+    }
+}
+
+// ── FieldConfig ───────────────────────────────────────────────────────────────
+
+/// Complete parsed configuration for one field in the derived struct.
+///
+/// Produced by parse_fields() from the struct's field definitions and
+/// their #[figtree()] attributes. Consumed by all generate_* functions.
+#[derive(Debug)]
+pub struct FieldConfig {
+    /// The field's Rust identifier (e.g. `workers`).
+    pub ident: Ident,
+
+    /// The field's Rust type (e.g. `i32`, `String`, `Vec<String>`).
+    pub ty: Type,
+
+    /// The inferred mutagenesis from the field's type.
+    pub mutagenesis: FieldMutagenesis,
+
+    /// The key name used in the Tree. Defaults to the field name.
+    /// Can be overridden with #[figtree(key = "custom_key")].
+    pub key: String,
+
+    /// The default value expression, if provided.
+    /// None means the key is required.
+    pub default: Option<Expr>,
+
+    /// The environment variable name override.
+    /// None means no env var for this field (Tree's EnvSource still applies
+    /// using the key name by default).
+    pub env: Option<String>,
+
+    /// Validator expressions in registration order.
+    /// Each is a complete expression like `assure_int_in_range(1, 64)`.
+    pub validators: Vec<Expr>,
+
+    /// on_change closure expression, if provided.
+    pub on_change: Option<Expr>,
+
+    /// on_verify closure expression, if provided.
+    pub on_verify: Option<Expr>,
+
+    /// on_read closure expression, if provided.
+    pub on_read: Option<Expr>,
+
+    /// The rule for this field, if provided.
+    pub rule: Option<FieldRule>,
+
+    /// Human-readable description for usage() output.
+    pub description: String,
+}
+
+impl FieldConfig {
+    /// Parses a single struct field into a FieldConfig.
+    pub fn from_field(field: &Field) -> syn::Result<Self> {
+        let ident = field.ident.clone().ok_or_else(|| {
+            syn::Error::new(field.span(), "figtree: tuple struct fields are not supported")
+        })?;
+
+        let ty          = field.ty.clone();
+        let mutagenesis = FieldMutagenesis::from_type(&ty)?;
+        let key         = ident.to_string();
+
+        let mut config = FieldConfig {
+            ident,
+            ty,
+            mutagenesis,
+            key,
+            default:     None,
+            env:         None,
+            validators:  Vec::new(),
+            on_change:   None,
+            on_verify:   None,
+            on_read:     None,
+            rule:        None,
+            description: String::new(),
+        };
+
+        for attr in &field.attrs {
+            if !attr.path().is_ident("figtree") {
+                continue;
+            }
+            attr.parse_nested_meta(|meta| {
+                config.parse_field_attr(&meta)
+            })?;
+        }
+
+        Ok(config)
+    }
+
+    fn parse_field_attr(&mut self, meta: &syn::meta::ParseNestedMeta) -> syn::Result<()> {
+        // key = "custom_key"
+        if meta.path.is_ident("key") {
+            let value = meta.value()?;
+            let lit: Lit = value.parse()?;
+            if let Lit::Str(s) = lit {
+                self.key = s.value();
+            } else {
+                return Err(syn_error(&meta.path, "key must be a string literal"));
+            }
+            return Ok(());
+        }
+
+        // default = <expr>
+        if meta.path.is_ident("default") {
+            let value = meta.value()?;
+            let expr: Expr = value.parse()?;
+            self.default = Some(expr);
+            return Ok(());
+        }
+
+        // env = "ENV_VAR_NAME"
+        if meta.path.is_ident("env") {
+            let value = meta.value()?;
+            let lit: Lit = value.parse()?;
+            if let Lit::Str(s) = lit {
+                self.env = Some(s.value());
+            } else {
+                return Err(syn_error(&meta.path, "env must be a string literal"));
+            }
+            return Ok(());
+        }
+
+        // validate = <expr>  (may appear multiple times)
+        if meta.path.is_ident("validate") {
+            let value = meta.value()?;
+            let expr: Expr = value.parse()?;
+            self.validators.push(expr);
+            return Ok(());
+        }
+
+        // on_change = <closure>
+        if meta.path.is_ident("on_change") {
+            let value = meta.value()?;
+            let expr: Expr = value.parse()?;
+            self.on_change = Some(expr);
+            return Ok(());
+        }
+
+        // on_verify = <closure>
+        if meta.path.is_ident("on_verify") {
+            let value = meta.value()?;
+            let expr: Expr = value.parse()?;
+            self.on_verify = Some(expr);
+            return Ok(());
+        }
+
+        // on_read = <closure>
+        if meta.path.is_ident("on_read") {
+            let value = meta.value()?;
+            let expr: Expr = value.parse()?;
+            self.on_read = Some(expr);
+            return Ok(());
+        }
+
+        // rule = RuleXxx
+        if meta.path.is_ident("rule") {
+            let value = meta.value()?;
+            let ident: Ident = value.parse()?;
+            self.rule = Some(FieldRule::from_ident(&ident)?);
+            return Ok(());
+        }
+
+        // description = "human readable text"
+        if meta.path.is_ident("description") {
+            let value = meta.value()?;
+            let lit: Lit = value.parse()?;
+            if let Lit::Str(s) = lit {
+                self.description = s.value();
+            } else {
+                return Err(syn_error(&meta.path, "description must be a string literal"));
+            }
+            return Ok(());
+        }
+
+        Err(syn_error(
+            &meta.path,
+            &format!(
+                "unknown field-level figtree attribute '{}'. \
+                 Expected: key, default, env, validate, on_change, \
+                 on_verify, on_read, rule, description",
+                meta.path.get_ident().map(|i| i.to_string()).unwrap_or_default()
+            ),
+        ))
+    }
+}
+
+// ── parse_fields ──────────────────────────────────────────────────────────────
+
+/// Parses all named fields from a DeriveInput into FieldConfig values.
+/// Returns a syn::Error if any field has an unsupported type or invalid
+/// #[figtree()] attribute.
+pub fn parse_fields(input: &DeriveInput) -> syn::Result<Vec<FieldConfig>> {
+    let fields = match &input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            Fields::Named(named) => &named.named,
+            Fields::Unnamed(_) => {
+                return Err(syn::Error::new(
+                    input.ident.span(),
+                    "figtree: #[derive(Figtree)] requires a struct with named fields",
+                ))
+            }
+            Fields::Unit => {
+                return Err(syn::Error::new(
+                    input.ident.span(),
+                    "figtree: #[derive(Figtree)] requires a struct with named fields",
+                ))
+            }
+        },
+        syn::Data::Enum(_) => {
+            return Err(syn::Error::new(
+                input.ident.span(),
+                "figtree: #[derive(Figtree)] cannot be applied to enums",
+            ))
+        }
+        syn::Data::Union(_) => {
+            return Err(syn::Error::new(
+                input.ident.span(),
+                "figtree: #[derive(Figtree)] cannot be applied to unions",
+            ))
+        }
+    };
+
+    fields.iter().map(FieldConfig::from_field).collect()
+}
+
+// ── Generic arg helpers ───────────────────────────────────────────────────────
+
+fn extract_first_generic_arg(
+    segment: &syn::PathSegment,
+) -> syn::Result<String> {
+    match &segment.arguments {
+        syn::PathArguments::AngleBracketed(args) => {
+            let arg = args.args.first().ok_or_else(|| {
+                syn::Error::new(segment.ident.span(), "expected a generic argument")
+            })?;
+            match arg {
+                syn::GenericArgument::Type(Type::Path(tp)) => {
+                    Ok(tp.path.segments.last()
+                        .map(|s| s.ident.to_string())
+                        .unwrap_or_default())
+                }
+                _ => Err(syn::Error::new(
+                    segment.ident.span(),
+                    "figtree: generic argument must be a simple type path",
+                )),
+            }
+        }
+        _ => Err(syn::Error::new(
+            segment.ident.span(),
+            "figtree: expected angle-bracketed generic arguments",
+        )),
+    }
+}
+
+fn extract_map_generic_args(
+    segment: &syn::PathSegment,
+) -> syn::Result<(String, String)> {
+    match &segment.arguments {
+        syn::PathArguments::AngleBracketed(args) => {
+            let mut iter = args.args.iter();
+
+            let key = match iter.next() {
+                Some(syn::GenericArgument::Type(Type::Path(tp))) => {
+                    tp.path.segments.last()
+                        .map(|s| s.ident.to_string())
+                        .unwrap_or_default()
+                }
+                _ => return Err(syn::Error::new(
+                    segment.ident.span(),
+                    "figtree: HashMap key must be a simple type",
+                )),
+            };
+
+            let val = match iter.next() {
+                Some(syn::GenericArgument::Type(Type::Path(tp))) => {
+                    tp.path.segments.last()
+                        .map(|s| s.ident.to_string())
+                        .unwrap_or_default()
+                }
+                _ => return Err(syn::Error::new(
+                    segment.ident.span(),
+                    "figtree: HashMap value must be a simple type",
+                )),
+            };
+
+            Ok((key, val))
+        }
+        _ => Err(syn::Error::new(
+            segment.ident.span(),
+            "figtree: expected angle-bracketed generic arguments on HashMap",
+        )),
+    }
+}
