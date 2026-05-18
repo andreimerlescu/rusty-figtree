@@ -38,14 +38,14 @@ pub enum Rule {
     /// Resolution falls through to the next source in priority order.
     NoEnv,
 
-    /// NewMap, store with a map type, and the map getter are all
-    /// blocked for this key. Returns FigtreeError::RuleViolation
-    /// if attempted.
+    /// Rejects with_rule() if the key holds a map type, and rejects
+    /// store() calls that supply any map FigValue variant.
+    /// Use to guarantee a key is never a map type.
     NoMaps,
 
-    /// NewList, store with a list type, and the list getter are all
-    /// blocked for this key. Returns FigtreeError::RuleViolation
-    /// if attempted.
+    /// Rejects with_rule() if the key holds a list type, and rejects
+    /// store() calls that supply any list FigValue variant.
+    /// Use to guarantee a key is never a list type.
     NoLists,
 
     /// If a condemned key is accessed via resurrect(), the tree
@@ -78,6 +78,16 @@ impl Rule {
     /// Returns true if this rule ignores the environment source.
     pub fn ignores_env(&self) -> bool {
         matches!(self, Rule::NoEnv)
+    }
+
+    /// Returns true if this rule blocks map types.
+    pub fn blocks_maps(&self) -> bool {
+        matches!(self, Rule::NoMaps)
+    }
+
+    /// Returns true if this rule blocks list types.
+    pub fn blocks_lists(&self) -> bool {
+        matches!(self, Rule::NoLists)
     }
 }
 

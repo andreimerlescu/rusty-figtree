@@ -1,0 +1,7 @@
+# Mark the target directory as generated and linguist-documentation to exclude it from language stats
+target/** linguist-generated
+target/** linguist-documentation
+target/** -linguist-vendored
+
+# Ensure line endings are handled correctly across OS platforms for Rust files
+*.rs text eol=lf

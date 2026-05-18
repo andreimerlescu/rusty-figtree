@@ -70,7 +70,7 @@ pub struct Tree {
     descriptions: HashMap<String, String>,
     validators:   HashMap<String, ValidatorRegistry>,
     callbacks:    HashMap<String, CallbackRegistry>,
-    flag_source:  Option<Box<dyn Source>>,
+    pub(crate) flag_source:  Option<Box<dyn Source>>,
     env_source:   Option<Box<dyn Source>>,
     file_sources: Vec<Box<dyn Source>>,
     tracking:     bool,
@@ -351,6 +351,17 @@ impl Tree {
         self.register(key, Some(FigValue::ListFloat64(default)))
     }
 
+    pub fn new_list_float128(
+        &mut self,
+        key:         impl Into<String>,
+        default:     Vec<f64>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        let key = key.into();
+        self.descriptions.insert(key.clone(), description.into());
+        self.register(key, Some(FigValue::ListFloat128(default)))
+    }
+
     pub fn new_list_bool(
         &mut self,
         key:         impl Into<String>,
@@ -382,6 +393,61 @@ impl Tree {
         let key = key.into();
         self.descriptions.insert(key.clone(), description.into());
         self.register(key, Some(FigValue::MapBool(default)))
+    }
+
+    pub fn new_map_int(
+        &mut self,
+        key:         impl Into<String>,
+        default:     HashMap<String, i32>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        let key = key.into();
+        self.descriptions.insert(key.clone(), description.into());
+        self.register(key, Some(FigValue::MapInt(default)))
+    }
+
+    pub fn new_map_int64(
+        &mut self,
+        key:         impl Into<String>,
+        default:     HashMap<String, i64>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        let key = key.into();
+        self.descriptions.insert(key.clone(), description.into());
+        self.register(key, Some(FigValue::MapInt64(default)))
+    }
+
+    pub fn new_map_int128(
+        &mut self,
+        key:         impl Into<String>,
+        default:     HashMap<String, i128>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        let key = key.into();
+        self.descriptions.insert(key.clone(), description.into());
+        self.register(key, Some(FigValue::MapInt128(default)))
+    }
+
+    pub fn new_map_float64(
+        &mut self,
+        key:         impl Into<String>,
+        default:     HashMap<String, f64>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        let key = key.into();
+        self.descriptions.insert(key.clone(), description.into());
+        self.register(key, Some(FigValue::MapFloat64(default)))
+    }
+
+    pub fn new_map_float128(
+        &mut self,
+        key:         impl Into<String>,
+        default:     HashMap<String, f64>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        let key = key.into();
+        self.descriptions.insert(key.clone(), description.into());
+        self.register(key, Some(FigValue::MapFloat128(default)))
     }
 
     // ── Constraints ───────────────────────────────────────────────────────────
@@ -432,16 +498,46 @@ impl Tree {
     }
 
     /// Sets the rule for a key.
+    ///
+    /// Rule::NoMaps rejects if the key's registered type is any map variant.
+    /// Rule::NoLists rejects if the key's registered type is any list variant.
     pub fn with_rule(
         &mut self,
         key:  impl Into<String>,
         rule: Rule,
     ) -> FigtreeResult<&mut Self> {
         let key = key.into();
-        match self.figs.get_mut(&key) {
-            Some(fig) => { fig.rule = rule; Ok(self) }
-            None      => Err(FigtreeError::UnknownKey(key)),
+        let fig = match self.figs.get(&key) {
+            Some(f) => f,
+            None    => return Err(FigtreeError::UnknownKey(key)),
+        };
+
+        // NoMaps: reject if this key's default is a map type
+        if rule.blocks_maps() {
+            if let Some(v) = &fig.default {
+                if v.is_map() {
+                    return Err(FigtreeError::RuleViolation {
+                        key,
+                        rule: rule.to_string(),
+                    });
+                }
+            }
         }
+
+        // NoLists: reject if this key's default is a list type
+        if rule.blocks_lists() {
+            if let Some(v) = &fig.default {
+                if v.is_list() {
+                    return Err(FigtreeError::RuleViolation {
+                        key,
+                        rule: rule.to_string(),
+                    });
+                }
+            }
+        }
+
+        self.figs.get_mut(&key).unwrap().rule = rule;
+        Ok(self)
     }
 
     // ── Resolution ────────────────────────────────────────────────────────────
@@ -474,15 +570,32 @@ impl Tree {
         let key = key.into();
 
         // collect what we need before mutating
-        let (skip_validators, skip_callbacks, old_value) = {
+        let (skip_validators, skip_callbacks, old_value, rule) = {
             let fig = self.figs.get(&key)
                 .ok_or_else(|| FigtreeError::UnknownKey(key.clone()))?;
             (
                 fig.rule == Rule::NoValidations,
                 fig.rule == Rule::NoCallbacks,
                 fig.value.clone(),
+                fig.rule.clone(),
             )
         };
+
+        // NoMaps: block store() if the incoming value is a map type
+        if rule.blocks_maps() && value.is_map() {
+            return Err(FigtreeError::RuleViolation {
+                key,
+                rule: rule.to_string(),
+            });
+        }
+
+        // NoLists: block store() if the incoming value is a list type
+        if rule.blocks_lists() && value.is_list() {
+            return Err(FigtreeError::RuleViolation {
+                key,
+                rule: rule.to_string(),
+            });
+        }
 
         // validate before mutating
         if !skip_validators {
@@ -525,13 +638,6 @@ impl Tree {
 
     /// Re-checks all environment variables and updates any Figs whose
     /// env var value has changed since last resolution.
-    ///
-    /// This is an explicit mutation — it takes &mut self and is visible
-    /// in the call site. Call it periodically in a ticker or on SIGHUP
-    /// when you want live env var updates without restarting.
-    ///
-    /// Only active when Options::pollinate was true at construction.
-    /// Returns immediately if pollination is disabled.
     pub fn pollinate(&mut self) -> FigtreeResult<()> {
         if !self.pollinate {
             return Ok(());
@@ -544,8 +650,6 @@ impl Tree {
     }
 
     /// Re-checks the environment variable for a single key.
-    /// Follows the same rules as pollinate() — only active when
-    /// Options::pollinate was true at construction.
     pub fn pollinate_key(&mut self, key: &str) -> FigtreeResult<()> {
         if !self.pollinate {
             return Ok(());
@@ -553,7 +657,6 @@ impl Tree {
 
         let env_source = crate::sources::EnvSource::new();
 
-        // collect what we need before mutating
         let (hint, current) = {
             let fig = match self.figs.get(key) {
                 Some(f) => f,
@@ -579,7 +682,6 @@ impl Tree {
             None    => return Ok(()),
         };
 
-        // only update if the value actually changed
         if current.as_ref() == Some(&typed) {
             return Ok(());
         }
@@ -596,11 +698,6 @@ impl Tree {
     }
 
     // ── Getters — all take &self ──────────────────────────────────────────────
-    //
-    // The audience has spoken. The Rust API Guidelines, the Rust book,
-    // and the community all agree: getters take &self and are pure reads.
-    // Side effects (pollination) are explicit separate calls.
-    // This means &str can be returned directly without unsafe tricks.
 
     /// Returns the current String value for a key.
     pub fn string(&self, key: &str) -> FigtreeResult<&str> {
@@ -687,7 +784,6 @@ impl Tree {
     }
 
     /// Returns the current Bool value for a key.
-    /// Named `boolean` because `bool` is a Rust keyword.
     pub fn boolean(&self, key: &str) -> FigtreeResult<bool> {
         self.invoke_after_read(key)?;
         match self.require_fig(key)?.resolve() {
@@ -743,6 +839,76 @@ impl Tree {
         }
     }
 
+    /// Returns the current ListInt64 value for a key.
+    pub fn list_int64(&self, key: &str) -> FigtreeResult<Vec<i64>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::ListInt64(v)) => Ok(v.clone()),
+            Some(other)                  => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "ListInt64".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current ListInt128 value for a key.
+    pub fn list_int128(&self, key: &str) -> FigtreeResult<Vec<i128>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::ListInt128(v)) => Ok(v.clone()),
+            Some(other)                   => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "ListInt128".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current ListFloat64 value for a key.
+    pub fn list_float64(&self, key: &str) -> FigtreeResult<Vec<f64>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::ListFloat64(v)) => Ok(v.clone()),
+            Some(other)                    => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "ListFloat64".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current ListFloat128 value for a key.
+    pub fn list_float128(&self, key: &str) -> FigtreeResult<Vec<f64>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::ListFloat128(v)) => Ok(v.clone()),
+            Some(other)                     => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "ListFloat128".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current ListBool value for a key.
+    pub fn list_bool(&self, key: &str) -> FigtreeResult<Vec<bool>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::ListBool(v)) => Ok(v.clone()),
+            Some(other)                 => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "ListBool".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
     /// Returns the current MapString value for a key.
     pub fn map_string(&self, key: &str) -> FigtreeResult<HashMap<String, String>> {
         self.invoke_after_read(key)?;
@@ -757,6 +923,90 @@ impl Tree {
         }
     }
 
+    /// Returns the current MapBool value for a key.
+    pub fn map_bool(&self, key: &str) -> FigtreeResult<HashMap<String, bool>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::MapBool(m)) => Ok(m.clone()),
+            Some(other)                => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "MapBool".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current MapInt value for a key.
+    pub fn map_int(&self, key: &str) -> FigtreeResult<HashMap<String, i32>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::MapInt(m)) => Ok(m.clone()),
+            Some(other)               => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "MapInt".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current MapInt64 value for a key.
+    pub fn map_int64(&self, key: &str) -> FigtreeResult<HashMap<String, i64>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::MapInt64(m)) => Ok(m.clone()),
+            Some(other)                 => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "MapInt64".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current MapInt128 value for a key.
+    pub fn map_int128(&self, key: &str) -> FigtreeResult<HashMap<String, i128>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::MapInt128(m)) => Ok(m.clone()),
+            Some(other)                  => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "MapInt128".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current MapFloat64 value for a key.
+    pub fn map_float64(&self, key: &str) -> FigtreeResult<HashMap<String, f64>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::MapFloat64(m)) => Ok(m.clone()),
+            Some(other)                   => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "MapFloat64".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
+    /// Returns the current MapFloat128 value for a key.
+    pub fn map_float128(&self, key: &str) -> FigtreeResult<HashMap<String, f64>> {
+        self.invoke_after_read(key)?;
+        match self.require_fig(key)?.resolve() {
+            Some(FigValue::MapFloat128(m)) => Ok(m.clone()),
+            Some(other)                    => Err(FigtreeError::TypeMismatch {
+                key:      key.into(),
+                expected: "MapFloat128".into(),
+                got:      other.type_name().into(),
+            }),
+            None => Err(FigtreeError::MissingRequired(key.into())),
+        }
+    }
+
     /// Returns the raw Fig for a key, providing access to history,
     /// source, rule, and error fields.
     pub fn fig(&self, key: &str) -> Option<&Fig> {
@@ -765,13 +1015,6 @@ impl Tree {
 
     // ── Mutation tracking ─────────────────────────────────────────────────────
 
-    /// Returns a MutationReceiver that emits a Mutation whenever any
-    /// Fig's value changes. Requires tracking to have been enabled at
-    /// construction time via Tree::grow() or Options { tracking: true }.
-    ///
-    /// Call this before parse() or load() to receive all mutations
-    /// including those from initial resolution. Each call creates a
-    /// new channel pair — previous receivers are disconnected.
     pub fn mutations(&mut self) -> Option<MutationReceiver> {
         if !self.tracking {
             return None;
@@ -781,15 +1024,10 @@ impl Tree {
         Some(rx)
     }
 
-    /// Disables mutation tracking temporarily.
-    /// Existing receivers will see the channel close.
-    /// Call recall() to re-enable.
     pub fn curse(&mut self) {
         self.mutation_tx = None;
     }
 
-    /// Re-enables mutation tracking after curse().
-    /// Callers must call mutations() again to get the new receiver.
     pub fn recall(&mut self) {
         if self.tracking {
             let (tx, _rx) = mutation_channel();
@@ -799,8 +1037,6 @@ impl Tree {
 
     // ── Diagnostics — all take &self ──────────────────────────────────────────
 
-    /// Returns a human-readable summary of all registered keys,
-    /// their current values, sources, and descriptions.
     pub fn usage(&self) -> String {
         let mut keys: Vec<&str> = self.figs.keys().map(|k| k.as_str()).collect();
         keys.sort();
@@ -827,8 +1063,6 @@ impl Tree {
         lines.join("\n")
     }
 
-    /// Returns all errors currently recorded against any Fig.
-    /// An empty Vec means all Figs resolved and validated cleanly.
     pub fn problems(&self) -> Vec<FigtreeError> {
         self.figs.values()
             .filter_map(|fig| fig.error.as_ref())
@@ -836,35 +1070,28 @@ impl Tree {
             .collect()
     }
 
-    /// Returns the history of a key's state transitions.
     pub fn history(&self, key: &str) -> Option<&[FigHistoryEntry]> {
         self.figs.get(key).map(|fig| fig.history())
     }
 
-    /// Returns a formatted history log for a key.
     pub fn history_log(&self, key: &str) -> Option<String> {
         self.figs.get(key).map(|fig| fig.history_log())
     }
 
-    /// Returns true if parse() or load() has completed successfully.
     pub fn is_resolved(&self) -> bool {
         self.resolved
     }
 
-    /// Returns the number of registered keys.
     pub fn len(&self) -> usize {
         self.figs.len()
     }
 
-    /// Returns true if no keys are registered.
     pub fn is_empty(&self) -> bool {
         self.figs.is_empty()
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /// Registers a Fig for a key. First registration wins —
-    /// duplicate registrations are silently ignored.
     fn register(&mut self, key: String, default: Option<FigValue>) -> &mut Self {
         self.figs
             .entry(key.clone())
@@ -872,13 +1099,10 @@ impl Tree {
         self
     }
 
-    /// Core resolution loop used by both parse() and load().
-    /// include_flags controls whether the flag source is consulted.
     fn resolve_all(&mut self, include_flags: bool) -> FigtreeResult<()> {
         let keys: Vec<String> = self.figs.keys().cloned().collect();
 
         for key in keys {
-            // borrow fig immutably for resolution input
             let (rule, is_resolved, is_required) = {
                 let fig = match self.figs.get(&key) {
                     Some(f) => f,
@@ -887,7 +1111,6 @@ impl Tree {
                 (fig.rule.clone(), fig.is_resolved(), fig.is_required())
             };
 
-            // skip figs locked by PreventChange that are already resolved
             if rule == Rule::PreventChange && is_resolved {
                 continue;
             }
@@ -905,10 +1128,8 @@ impl Tree {
 
             match result {
                 Some(resolution) => {
-                    // coerce string-origin values to the correct type
                     let typed = self.coerce_to_type(&key, resolution.value)?;
 
-                    // validate
                     let skip_validators = rule == Rule::NoValidations;
                     if !skip_validators {
                         if let Some(registry) = self.validators.get(&key) {
@@ -924,15 +1145,12 @@ impl Tree {
                         }
                     }
 
-                    // record old value for mutation
                     let old_value = self.figs.get(&key)
                         .and_then(|f| f.value.clone());
 
-                    // mutate
                     self.figs.get_mut(&key).unwrap()
                         .set(typed.clone(), resolution.source.clone())?;
 
-                    // fire AfterVerify callbacks
                     let skip_callbacks = rule == Rule::NoCallbacks;
                     if !skip_callbacks {
                         if let Some(registry) = self.callbacks.get(&key) {
@@ -947,20 +1165,12 @@ impl Tree {
                         }
                     }
 
-                    // emit mutation
-                    self.emit_mutation(
-                        key,
-                        old_value,
-                        typed,
-                        resolution.source,
-                    );
+                    self.emit_mutation(key, old_value, typed, resolution.source);
                 }
                 None if is_required => {
                     return Err(FigtreeError::MissingRequired(key));
                 }
-                None => {
-                    // optional key with no value — remains unresolved
-                }
+                None => {}
             }
         }
 
@@ -968,15 +1178,6 @@ impl Tree {
         Ok(())
     }
 
-    /// Coerces a FigValue from a string-origin source into the correct
-    /// mutagenesis type for the registered Fig.
-    ///
-    /// String-origin sources (env, cli, ini, dotenv, embedded) return
-    /// FigValue::String(raw). This function parses the raw string into
-    /// the correct variant using the Fig's declared type as a hint.
-    ///
-    /// Typed-origin sources (yaml, json, toml, plist, ron) already
-    /// return the correct variant and pass through unchanged.
     fn coerce_to_type(
         &self,
         key:   &str,
@@ -988,11 +1189,8 @@ impl Tree {
             .cloned();
 
         match (value, hint.as_ref()) {
-            // typed-origin or already correct — pass through
             (v, Some(h)) if h.same_type(&v) => Ok(v),
             (v, None)                        => Ok(v),
-
-            // string-origin needs coercion
             (FigValue::String(raw), Some(hint_val)) => {
                 crate::sources::env::parse_env_value(&raw, hint_val)
                     .ok_or_else(|| FigtreeError::ParseFailed {
@@ -1005,14 +1203,10 @@ impl Tree {
                         ),
                     })
             }
-
-            // no hint and no match — accept as-is
             (v, _) => Ok(v),
         }
     }
 
-    /// Fires AfterRead callbacks for a key.
-    /// Takes &self — pure read, no mutation.
     fn invoke_after_read(&self, key: &str) -> FigtreeResult<()> {
         let fig = match self.figs.get(key) {
             Some(f) => f,
@@ -1040,8 +1234,6 @@ impl Tree {
         Ok(())
     }
 
-    /// Emits a Mutation to the tracking channel if tracking is enabled
-    /// and the value actually changed from the previous value.
     fn emit_mutation(
         &self,
         key:       String,
@@ -1061,15 +1253,12 @@ impl Tree {
         }
     }
 
-    /// Returns a reference to a Fig or FigtreeError::UnknownKey.
     fn require_fig(&self, key: &str) -> FigtreeResult<&Fig> {
         self.figs
             .get(key)
             .ok_or_else(|| FigtreeError::UnknownKey(key.into()))
     }
 
-    /// Attempts to detect a config file format from its extension
-    /// and register it as a file source. Silently ignores failures.
     fn load_config_file_by_extension(&mut self, path: &str) {
         let lower = path.to_lowercase();
 
@@ -1224,6 +1413,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn test_load_skips_flag_source_and_preserves_it() {
         let mut tree = Tree::new();
@@ -1234,11 +1424,8 @@ mod tests {
         flags.insert("workers".to_string(), "99".to_string());
         tree.with_flag_source(Box::new(crate::sources::CliSource::new(flags)));
 
-        // load() skips flags — should use default of 4
         tree.load().unwrap();
         assert_eq!(tree.integer("workers").unwrap(), 4);
-
-        // flag source must still be present for a subsequent parse()
         assert!(tree.flag_source.is_some());
     }
 
@@ -1249,8 +1436,6 @@ mod tests {
         let mut tree = Tree::new();
         tree.new_string("host", "localhost", "");
         tree.parse().unwrap();
-
-        // this must compile — &self means we can hold multiple borrows
         let a = tree.string("host").unwrap();
         let b = tree.string("host").unwrap();
         assert_eq!(a, b);
@@ -1275,6 +1460,45 @@ mod tests {
         assert_eq!(tree.float64("ratio").unwrap(),    0.75);
         assert_eq!(tree.boolean("debug").unwrap(),    false);
         assert_eq!(tree.string("host").unwrap(),      "x");
+    }
+
+    #[test]
+    fn test_all_list_getters_round_trip() {
+        let mut tree = Tree::new();
+        tree.new_list_int64("ids64",    vec![i64::MAX], "")
+            .new_list_int128("ids128",  vec![i64::MAX as i128 + 1], "")
+            .new_list_float64("floats", vec![1.5, 2.5], "")
+            .new_list_bool("flags",     vec![true, false], "");
+        tree.parse().unwrap();
+
+        assert_eq!(tree.list_int64("ids64").unwrap(),    vec![i64::MAX]);
+        assert_eq!(tree.list_int128("ids128").unwrap(),  vec![i64::MAX as i128 + 1]);
+        assert_eq!(tree.list_float64("floats").unwrap(), vec![1.5, 2.5]);
+        assert_eq!(tree.list_bool("flags").unwrap(),     vec![true, false]);
+    }
+
+    #[test]
+    fn test_all_map_getters_round_trip() {
+        let mut tree = Tree::new();
+
+        let mut mi    = HashMap::new(); mi.insert("a".to_string(), 1i32);
+        let mut mi64  = HashMap::new(); mi64.insert("b".to_string(), 2i64);
+        let mut mi128 = HashMap::new(); mi128.insert("c".to_string(), 3i128);
+        let mut mf64  = HashMap::new(); mf64.insert("d".to_string(), 4.0f64);
+        let mut mb    = HashMap::new(); mb.insert("e".to_string(), true);
+
+        tree.new_map_int("map_i",       mi.clone(),    "")
+            .new_map_int64("map_i64",   mi64.clone(),  "")
+            .new_map_int128("map_i128", mi128.clone(), "")
+            .new_map_float64("map_f64", mf64.clone(),  "")
+            .new_map_bool("map_b",      mb.clone(),    "");
+        tree.parse().unwrap();
+
+        assert_eq!(tree.map_int("map_i").unwrap(),       mi);
+        assert_eq!(tree.map_int64("map_i64").unwrap(),   mi64);
+        assert_eq!(tree.map_int128("map_i128").unwrap(), mi128);
+        assert_eq!(tree.map_float64("map_f64").unwrap(), mf64);
+        assert_eq!(tree.map_bool("map_b").unwrap(),      mb);
     }
 
     #[test]
@@ -1336,7 +1560,6 @@ mod tests {
         let mut tree = Tree::new();
         tree.new_int("workers", 4, "");
         tree.parse().unwrap();
-        // pollinate is false by default — no-op, no error
         tree.pollinate().unwrap();
         assert_eq!(tree.integer("workers").unwrap(), 4);
     }
@@ -1462,7 +1685,6 @@ mod tests {
             }),
         }).unwrap();
         tree.with_rule("workers", Rule::NoValidations).unwrap();
-        // workers=0 fails the validator but rule skips it
         assert!(tree.parse().is_ok());
         assert_eq!(tree.integer("workers").unwrap(), 0);
     }
@@ -1473,6 +1695,71 @@ mod tests {
         assert!(matches!(
             tree.with_rule("nonexistent", Rule::PreventChange),
             Err(FigtreeError::UnknownKey(_))
+        ));
+    }
+
+    #[test]
+    fn test_no_maps_rejects_map_key_at_rule_time() {
+        let mut tree = Tree::new();
+        tree.new_map_string("metadata", HashMap::new(), "");
+        assert!(matches!(
+            tree.with_rule("metadata", Rule::NoMaps),
+            Err(FigtreeError::RuleViolation { .. })
+        ));
+    }
+
+    #[test]
+    fn test_no_maps_allows_scalar_key() {
+        let mut tree = Tree::new();
+        tree.new_int("workers", 4, "");
+        assert!(tree.with_rule("workers", Rule::NoMaps).is_ok());
+    }
+
+    #[test]
+    fn test_no_maps_blocks_store_of_map_value() {
+        let mut tree = Tree::new();
+        tree.new_map_string("metadata", HashMap::new(), "");
+        // can't apply NoMaps to a map key — apply it to a scalar key instead
+        // then try to store a map value into it (after changing the type — use
+        // a key that starts as a map and test store directly via the rule)
+        // Actually test: scalar key with NoMaps, then store a map FigValue
+        tree.new_string("tag", "hello", "");
+        tree.with_rule("tag", Rule::NoMaps).unwrap();
+        tree.parse().unwrap();
+        let mut m = HashMap::new();
+        m.insert("a".to_string(), "b".to_string());
+        assert!(matches!(
+            tree.store("tag", FigValue::MapString(m)),
+            Err(FigtreeError::RuleViolation { .. })
+        ));
+    }
+
+    #[test]
+    fn test_no_lists_rejects_list_key_at_rule_time() {
+        let mut tree = Tree::new();
+        tree.new_list_string("tags", vec![], "");
+        assert!(matches!(
+            tree.with_rule("tags", Rule::NoLists),
+            Err(FigtreeError::RuleViolation { .. })
+        ));
+    }
+
+    #[test]
+    fn test_no_lists_allows_scalar_key() {
+        let mut tree = Tree::new();
+        tree.new_int("workers", 4, "");
+        assert!(tree.with_rule("workers", Rule::NoLists).is_ok());
+    }
+
+    #[test]
+    fn test_no_lists_blocks_store_of_list_value() {
+        let mut tree = Tree::new();
+        tree.new_string("tag", "hello", "");
+        tree.with_rule("tag", Rule::NoLists).unwrap();
+        tree.parse().unwrap();
+        assert!(matches!(
+            tree.store("tag", FigValue::ListString(vec!["a".into()])),
+            Err(FigtreeError::RuleViolation { .. })
         ));
     }
 

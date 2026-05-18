@@ -1,4 +1,4 @@
-.PHONY: all build build-derive test test-figtree test-derive clean patch minor major
+.PHONY: all build build-derive test test-figtree test-derive clean patch minor major summary save-summary
 
 # ── Workspace targets ─────────────────────────────────────────────────────────
 
@@ -35,22 +35,16 @@ test-derive:
 	cargo test --quiet --package figtree-derive
 	@echo "✅ figtree-derive tests passed"
 
-# ── Version targets ───────────────────────────────────────────────────────────
-
-patch:
-	bump -patch -write
-	$(MAKE) build
-
-minor:
-	bump -minor -write
-	$(MAKE) build
-
-major:
-	bump -major -write
-	$(MAKE) build
-
 # ── Clean ─────────────────────────────────────────────────────────────────────
 
 clean:
 	cargo clean
 	@echo "🧹 Cleaned build artifacts"
+
+# ── Summaries ─────────────────────────────────────────────────────────────────────
+
+save-summary:
+	summarize -i "rs,toml,md,Makefile" -s "useExpanded,target/,bin/,.git/,.idea/"
+
+summary:
+	summarize -i "rs,toml,md,Makefile" -s "useExpanded,target/,bin/,.git/,.idea/" -print

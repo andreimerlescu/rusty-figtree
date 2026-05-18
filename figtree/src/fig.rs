@@ -81,6 +81,36 @@ impl FigValue {
     pub fn same_type(&self, other: &FigValue) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
     }
+
+    // add inside the FigValue impl block in fig.rs, after same_type()
+
+    /// Returns true if this value is any map variant.
+    pub fn is_map(&self) -> bool {
+        matches!(
+        self,
+        FigValue::MapString(_)
+            | FigValue::MapInt(_)
+            | FigValue::MapInt64(_)
+            | FigValue::MapInt128(_)
+            | FigValue::MapFloat64(_)
+            | FigValue::MapFloat128(_)
+            | FigValue::MapBool(_)
+    )
+    }
+
+    /// Returns true if this value is any list variant.
+    pub fn is_list(&self) -> bool {
+        matches!(
+        self,
+        FigValue::ListString(_)
+            | FigValue::ListInt(_)
+            | FigValue::ListInt64(_)
+            | FigValue::ListInt128(_)
+            | FigValue::ListFloat64(_)
+            | FigValue::ListFloat128(_)
+            | FigValue::ListBool(_)
+    )
+    }
 }
 
 impl std::fmt::Display for FigValue {

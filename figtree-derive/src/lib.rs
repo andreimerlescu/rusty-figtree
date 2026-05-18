@@ -31,6 +31,7 @@ use generate::{
 ///
 /// Applied to a struct whose fields declare configuration keys:
 ///
+/// ```ignore
 ///     use figtree::prelude::*;
 ///
 ///     #[derive(Figtree)]
@@ -86,6 +87,7 @@ use generate::{
 ///
 ///         Ok(())
 ///     }
+/// ```
 ///
 /// ## What Gets Generated
 ///
@@ -95,22 +97,26 @@ use generate::{
 ///
 /// ## Field Attributes
 ///
+/// ```ignore
 ///     default     = <expr>        default value (omit for required keys)
 ///     env         = "VAR_NAME"    environment variable name
 ///     validate    = <expr>        validator function or closure (repeatable)
-///     on_change   = <closure>     fires on store() — receives typed inner value
-///     on_verify   = <closure>     fires on parse()/load() — receives typed inner value
-///     on_read     = <closure>     fires on every getter call — receives typed inner value
+///     on_change   = <closure>     fires on store() - receives typed inner value
+///     on_verify   = <closure>     fires on parse()/load() - receives typed inner value
+///     on_read     = <closure>     fires on every getter call - receives typed inner value
 ///     rule        = RuleXxx       behavioral rule (one per field)
 ///     description = "text"        shown in usage() output
 ///     key         = "custom_key"  override the Tree key name (default: field name)
+/// ```
 ///
 /// ## Struct Attributes
 ///
+/// ```ignore
 ///     file      = "path"    config file to load (repeatable, in order)
 ///     tracking  = true      enable mutation tracking
 ///     pollinate = true      enable pollination via pollinate()
 ///     germinate = true      ignore -test. flags from the test runner
+/// ```
 #[proc_macro_derive(Figtree, attributes(figtree))]
 pub fn derive_figtree(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

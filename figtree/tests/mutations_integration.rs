@@ -146,6 +146,7 @@ fn store_after_curse_does_not_emit() {
 
     tree.new_int("workers", 4, "");
     tree.parse().unwrap();
+    let _ = rx.try_recv(); // drain the parse() first-resolution mutation
 
     tree.curse();
     tree.store("workers", FigValue::Int(8)).unwrap();

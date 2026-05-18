@@ -466,12 +466,7 @@ mod tests {
     fn test_resolve_all_optional_unresolved_fig_does_not_fail() {
         // a fig with no default and no required constraint is optional —
         // it simply remains unresolved and is not included in results
-        let mut optional = Fig::new("maybe_key", None);
-        // mark it as not required by giving it a default of sorts —
-        // actually, figs with None default ARE required by is_required().
-        // To test a truly optional fig we need one that has a default.
-        // Use a string default of empty to represent "optional but present".
-        optional = Fig::new("maybe_key", Some(FigValue::String(String::new())));
+        let optional = Fig::new("maybe_key", Some(FigValue::String(String::new())));
 
         let flag  = MapSource::empty_flag();
         let env   = MapSource::empty_env();
