@@ -6,6 +6,7 @@ pub mod callbacks;
 pub mod validators;
 pub mod priority;
 pub mod sources;
+pub mod tree;
 
 pub use error::{FigtreeError, FigtreeResult};
 pub use rules::Rule;
@@ -69,6 +70,7 @@ pub use validators::{
 };
 pub use priority::{Source, ResolutionResult, resolve, resolve_all};
 pub use sources::EnvSource;
+pub use tree::{Tree, Options};
 
 #[cfg(feature = "cli")]
 pub use sources::CliSource;
@@ -96,3 +98,38 @@ pub use sources::RonSource;
 
 #[cfg(feature = "embedded")]
 pub use sources::EmbeddedSource;
+
+/// Convenience prelude — import everything a consumer needs with
+/// use figtree::prelude::*;
+pub mod prelude {
+    pub use crate::tree::{Tree, Options};
+    pub use crate::fig::{Fig, FigValue, FigSource};
+    pub use crate::mutation::Mutation;
+    pub use crate::rules::Rule;
+    pub use crate::callbacks::CallbackPhase;
+    pub use crate::error::{FigtreeError, FigtreeResult};
+    pub use crate::validators::{
+        assure_string_not_empty,
+        assure_string_has_prefix,
+        assure_string_has_suffix,
+        assure_string_contains,
+        assure_string_not_contains,
+        assure_int_positive,
+        assure_int_in_range,
+        assure_int64_positive,
+        assure_int64_in_range,
+        assure_int128_positive,
+        assure_int128_in_range,
+        assure_float64_not_nan,
+        assure_float64_in_range,
+        assure_float128_not_nan,
+        assure_float128_in_range,
+        assure_duration_positive,
+        assure_duration_min,
+        assure_duration_max,
+        assure_list_not_empty,
+        assure_map_not_empty,
+        assure_map_has_key,
+        assure_map_has_keys,
+    };
+}
