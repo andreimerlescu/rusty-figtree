@@ -357,7 +357,6 @@ impl FieldRule {
 ///
 /// Produced by parse_fields() from the struct's field definitions and
 /// their #[figtree()] attributes. Consumed by all generate_* functions.
-#[derive(Debug)]
 pub struct FieldConfig {
     /// The field's Rust identifier (e.g. `workers`).
     pub ident: Ident,
