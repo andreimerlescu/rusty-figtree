@@ -13,7 +13,7 @@ homepage.workspace   = true
 authors.workspace    = true
 
 [features]
-default  = ["std", "env", "yaml", "json", "toml-fmt"]
+default  = ["std", "yaml", "json", "toml-fmt"]
 std      = []
 async    = ["tokio"]
 cli      = ["clap"]
