@@ -4,6 +4,7 @@ pub mod fig;
 pub mod mutation;
 pub mod callbacks;
 pub mod validators;
+pub mod priority;
 
 pub use error::{FigtreeError, FigtreeResult};
 pub use rules::Rule;
@@ -65,3 +66,4 @@ pub use validators::{
     assure_map_has_keys,
     assure_map_value_matches,
 };
+pub use priority::{Source, ResolutionResult, resolve, resolve_all};
