@@ -23,19 +23,16 @@ build-derive:
 
 # ── Test targets ──────────────────────────────────────────────────────────────
 
-# Run all tests across the workspace
 test:
-	cargo test --workspace
+	cargo test --quiet --workspace
 	@echo "✅ All tests passed"
 
-# Run figtree tests only
 test-figtree:
-	cargo test --package figtree
+	cargo test --quiet --package figtree
 	@echo "✅ figtree tests passed"
 
-# Run figtree-derive tests only
 test-derive:
-	cargo test --package figtree-derive
+	cargo test --quiet --package figtree-derive
 	@echo "✅ figtree-derive tests passed"
 
 # ── Version targets ───────────────────────────────────────────────────────────
