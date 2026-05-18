@@ -181,13 +181,17 @@ fn load_skips_flag_source_and_preserves_it() {
 
     let mut flags = HashMap::new();
     flags.insert("workers".to_string(), "99".to_string());
-    tree.with_flag_source(Box::new(CliSource::new(flags)));
+    tree.with_flag_source(Box::new(CliSource::new(flags.clone())));
 
+    // load() skips flags — default of 4 should win
     tree.load().unwrap();
-    // load() skips flag source — default of 4 should win
     assert_eq!(tree.integer("workers").unwrap(), 4);
-    // flag source must still be present for a subsequent parse()
-    assert!(tree.flag_source.is_some());
+
+    // prove flag source still works by calling parse() now
+    // if flag source was dropped, workers would still be 4
+    // if flag source is preserved, parse() would set it to 99
+    tree.parse().unwrap();
+    assert_eq!(tree.integer("workers").unwrap(), 99);
 }
 
 #[test]
