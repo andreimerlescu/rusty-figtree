@@ -428,7 +428,7 @@ fn rust_return_type(mutagenesis: &FieldMutagenesis) -> TokenStream {
         FieldMutagenesis::Int64       => quote! { i64 },
         FieldMutagenesis::Int128      => quote! { i128 },
         FieldMutagenesis::Float64     => quote! { f64 },
-        FieldMutagenesis::Float128    => quote! { f64 },
+        // FieldMutagenesis::Float128    => quote! { f64 }, // disabled until rust f128 stable
         FieldMutagenesis::Bool        => quote! { bool },
         FieldMutagenesis::Duration    => quote! { std::time::Duration },
         FieldMutagenesis::ListString  => quote! { Vec<String> },
