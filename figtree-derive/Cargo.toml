@@ -1,3 +1,21 @@
+[package]
+name        = "figtree-derive"
+description = "Procedural macro support for the figtree configuration crate."
+readme      = "README.md"
+keywords    = ["config", "derive", "macro", "figtree", "configuration"]
+categories  = ["config", "development-tools::procedural-macro-helpers"]
+
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+authors.workspace    = true
+
+[lib]
+proc-macro = true
+
 [dependencies]
-figtree        = "0.1.0"   # clear — the library
-figtree-derive = "0.1.0"   # clear — the proc macro for figtree
+syn         = { workspace = true }
+quote       = { workspace = true }
+proc-macro2 = { workspace = true }
