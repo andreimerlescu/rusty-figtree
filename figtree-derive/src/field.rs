@@ -124,14 +124,14 @@ impl FieldMutagenesis {
         let ident = segment.ident.to_string();
 
         match ident.as_str() {
-            "String"                    => return Ok(FieldMutagenesis::String),
-            "i32"                       => return Ok(FieldMutagenesis::Int),
-            "i64"                       => return Ok(FieldMutagenesis::Int64),
-            "i128"                      => return Ok(FieldMutagenesis::Int128),
-            "f64"                       => return Ok(FieldMutagenesis::Float64),
-            "bool"                      => return Ok(FieldMutagenesis::Bool),
-            "Duration" | "StdDuration"  => return Ok(FieldMutagenesis::Duration),
-            _                           => {}
+            "String"                   => return Ok(FieldMutagenesis::String),
+            "i32"                      => return Ok(FieldMutagenesis::Int),
+            "i64"                      => return Ok(FieldMutagenesis::Int64),
+            "i128"                     => return Ok(FieldMutagenesis::Int128),
+            "f64"                      => return Ok(FieldMutagenesis::Float64),
+            "bool"                     => return Ok(FieldMutagenesis::Bool),
+            "Duration" | "StdDuration" => return Ok(FieldMutagenesis::Duration),
+            _                          => {}
         }
 
         if ident == "Vec" {
@@ -188,8 +188,6 @@ impl FieldMutagenesis {
         ))
     }
 
-    /*
-    // disabled until rust f128 is stable
     pub fn tree_registration_method(&self) -> &'static str {
         match self {
             FieldMutagenesis::String      => "new_string",
@@ -197,7 +195,6 @@ impl FieldMutagenesis {
             FieldMutagenesis::Int64       => "new_int64",
             FieldMutagenesis::Int128      => "new_int128",
             FieldMutagenesis::Float64     => "new_float64",
-            // FieldMutagenesis::Float128    => "new_float128", // disabled until rust f128 is stable
             FieldMutagenesis::Bool        => "new_bool",
             FieldMutagenesis::Duration    => "new_duration",
             FieldMutagenesis::ListString  => "new_list_string",
@@ -218,7 +215,6 @@ impl FieldMutagenesis {
             FieldMutagenesis::Int64       => "int64",
             FieldMutagenesis::Int128      => "int128",
             FieldMutagenesis::Float64     => "float64",
-            // FieldMutagenesis::Float128    => "float128", // disabed until rust f128 is stable
             FieldMutagenesis::Bool        => "boolean",
             FieldMutagenesis::Duration    => "duration",
             FieldMutagenesis::ListString  => "list_string",
@@ -239,7 +235,6 @@ impl FieldMutagenesis {
             FieldMutagenesis::Int64       => "Int64",
             FieldMutagenesis::Int128      => "Int128",
             FieldMutagenesis::Float64     => "Float64",
-            // FieldMutagenesis::Float128    => "Float128", // disabled until rust f128 stable
             FieldMutagenesis::Bool        => "Bool",
             FieldMutagenesis::Duration    => "Duration",
             FieldMutagenesis::ListString  => "ListString",
@@ -267,7 +262,6 @@ impl FieldMutagenesis {
                 | FieldMutagenesis::MapBool
         )
     }
-    // disabled until rust f128 is stable */
 }
 
 // ── FieldRule ─────────────────────────────────────────────────────────────────
