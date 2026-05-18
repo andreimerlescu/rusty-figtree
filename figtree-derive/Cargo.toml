@@ -1,0 +1,3 @@
+[dependencies]
+figtree        = "0.1.0"   # clear — the library
+figtree-derive = "0.1.0"   # clear — the proc macro for figtree
