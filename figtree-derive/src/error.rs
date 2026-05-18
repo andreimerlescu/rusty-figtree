@@ -8,12 +8,6 @@ pub fn to_compile_error(error: syn::Error) -> TokenStream {
     error.to_compile_error()
 }
 
-/// Emits a compile_error! at the call site with the given message.
-/// Use when you do not have a specific token to point at.
-pub fn call_site_error(message: &str) -> TokenStream {
-    syn::Error::new(proc_macro2::Span::call_site(), message).to_compile_error()
-}
-
 /// Returns a syn::Error pointing at the given token.
 /// Use when you want to propagate the error via ? rather than returning
 /// a TokenStream directly.
