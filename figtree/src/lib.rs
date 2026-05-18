@@ -5,6 +5,7 @@ pub mod mutation;
 pub mod callbacks;
 pub mod validators;
 pub mod priority;
+pub mod sources;
 
 pub use error::{FigtreeError, FigtreeResult};
 pub use rules::Rule;
@@ -67,3 +68,19 @@ pub use validators::{
     assure_map_value_matches,
 };
 pub use priority::{Source, ResolutionResult, resolve, resolve_all};
+pub use sources::EnvSource;
+
+#[cfg(feature = "cli")]
+pub use sources::CliSource;
+
+#[cfg(feature = "yaml")]
+pub use sources::YamlSource;
+
+#[cfg(feature = "json")]
+pub use sources::JsonSource;
+
+#[cfg(feature = "ini")]
+pub use sources::IniSource;
+
+#[cfg(feature = "embedded")]
+pub use sources::EmbeddedSource;
