@@ -1,75 +1,39 @@
 use std::fmt;
 
 /// The canonical error type for figtree.
-///
-/// Every fallible operation in the crate returns FigtreeError.
-/// Consumers match on variants to handle specific failure modes.
 #[derive(Debug, Clone)]
 pub enum FigtreeError {
-
-    /// A required configuration key had no value from any source
-    /// and no default was declared.
     MissingRequired(String),
-
-    /// A value was present but could not be parsed into the
-    /// declared type. Carries the key name and the raw string
-    /// that failed to parse.
     ParseFailed {
-        key: String,
-        raw: String,
+        key:    String,
+        raw:    String,
         reason: String,
     },
-
-    /// A validator rejected the resolved value for a key.
-    /// Carries the key name and the validator's rejection message.
     ValidationFailed {
-        key: String,
+        key:     String,
         message: String,
     },
-
-    /// A callback returned an error.
-    /// Carries the key name, which callback phase triggered it,
-    /// and the underlying error message.
     CallbackFailed {
         key:     String,
         phase:   String,
         message: String,
     },
-
-    /// A configuration file could not be read or did not exist.
     FileNotFound(String),
-
-    /// A configuration file existed but could not be parsed.
-    /// Carries the file path and the parse error detail.
     FileParseFailed {
         path:   String,
         reason: String,
     },
-
-    /// A rule blocked an attempted operation on a key.
-    /// Carries the key name and which rule blocked it.
     RuleViolation {
         key:  String,
         rule: String,
     },
-
-    /// An operation was attempted on a key that has not been
-    /// registered on the tree.
     UnknownKey(String),
-
-    /// A key was registered more than once on the same tree.
     DuplicateKey(String),
-
-    /// A store operation was attempted on a key whose type
-    /// did not match the declared mutagenesis.
     TypeMismatch {
         key:      String,
         expected: String,
         got:      String,
     },
-
-    /// Wraps any error that does not fit a more specific variant.
-    /// Used sparingly — prefer a specific variant where possible.
     Other(String),
 }
 
@@ -119,5 +83,4 @@ impl fmt::Display for FigtreeError {
 
 impl std::error::Error for FigtreeError {}
 
-/// Convenience type alias used throughout the crate.
 pub type FigtreeResult<T> = Result<T, FigtreeError>;
