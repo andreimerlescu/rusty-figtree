@@ -1,9 +1,3 @@
-//! Configuration sources for figtree.
-//!
-//! Each source implements the Source trait from priority.rs.
-//! Sources are feature-gated — only the sources whose feature
-//! flags are enabled in Cargo.toml are compiled into the binary.
-
 pub mod env;
 
 #[cfg(feature = "cli")]
@@ -15,15 +9,23 @@ pub mod yaml;
 #[cfg(feature = "json")]
 pub mod json;
 
+#[cfg(feature = "toml-fmt")]
+pub mod toml;
+
 #[cfg(feature = "ini")]
 pub mod ini;
 
+#[cfg(feature = "plist")]
+pub mod plist;
+
+#[cfg(feature = "dotenv")]
+pub mod dotenv;
+
+#[cfg(feature = "ron")]
+pub mod ron;
+
 #[cfg(feature = "embedded")]
 pub mod embedded;
-
-// Re-export all source types at the sources module level
-// so consumers can write figtree::sources::EnvSource rather
-// than figtree::sources::env::EnvSource.
 
 pub use env::EnvSource;
 
@@ -36,8 +38,20 @@ pub use yaml::YamlSource;
 #[cfg(feature = "json")]
 pub use json::JsonSource;
 
+#[cfg(feature = "toml-fmt")]
+pub use toml::TomlSource;
+
 #[cfg(feature = "ini")]
 pub use ini::IniSource;
+
+#[cfg(feature = "plist")]
+pub use plist::PlistSource;
+
+#[cfg(feature = "dotenv")]
+pub use dotenv::DotenvSource;
+
+#[cfg(feature = "ron")]
+pub use ron::RonSource;
 
 #[cfg(feature = "embedded")]
 pub use embedded::EmbeddedSource;
