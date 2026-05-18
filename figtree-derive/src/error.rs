@@ -8,12 +8,6 @@ pub fn to_compile_error(error: syn::Error) -> TokenStream {
     error.to_compile_error()
 }
 
-/// Emits a compile_error! pointing at the given token with the given message.
-/// Use when you have a spanned token to point at.
-pub fn spanned_error<T: Spanned>(token: &T, message: &str) -> TokenStream {
-    syn::Error::new(token.span(), message).to_compile_error()
-}
-
 /// Emits a compile_error! at the call site with the given message.
 /// Use when you do not have a specific token to point at.
 pub fn call_site_error(message: &str) -> TokenStream {
