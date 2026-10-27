@@ -4,6 +4,8 @@ A layered runtime configuration system for Rust, inspired by the Go figtree pack
 Supports multiple configuration sources with explicit priority resolution, per-key
 validators, per-key callbacks, and live mutation tracking via channels.
 
+![Unique](https://counthis.app/github?repository=andreimerlescu/rusty-figtree&label=Unique) ![Visitors](https://counthis.app/g/qyjy5vwjtjgbjfzy)
+
 ## Repository Structure
 
     rusty-figtree/
